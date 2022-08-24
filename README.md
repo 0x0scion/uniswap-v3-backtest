@@ -1,56 +1,82 @@
+# Perpatual Vault w Rebalance Backtester
+
+## Install
+
+```shell
+yarn install
+```
+
+## Run Example Test
+
+```
+yarn start
+```
+
+modify `src/index.ts` main() to run the test with different params or different pair
+
+rebalance and perpetual-specific logic is in `src/rebalance.ts`
+
 # Uniswap V3 LP Strategy BackTester
 
 Strategy Backtester for providing liquidity to a Uniswap V3 Pool. Based on logic described in the following article:
-
 
 [Historical Performances of Uniswap V3 Pools](https://defi-lab.medium.com/historical-performances-of-uniswap-l3-pools-2de713f7c70f)
 
 ![backtest-performance](https://user-images.githubusercontent.com/5744432/167617903-efd0829f-0b32-4c7f-b611-47398d8e435c.png)
 
-
-## Install 
+## Install
 
 ```shell
 npm install uniswap-v3-backtest
 ```
 
-
-## Usage 
+## Usage
 
 ```js
 // get results for last 25 days
 import uniswapStrategyBacktest from 'uniswap-v3-backtest'
-const backtestResults = await uniswapStrategyBacktest("0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 1000, 2120.09, 2662.99, {days: 25, period: "daily"});
+const backtestResults = await uniswapStrategyBacktest(
+  '0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640',
+  1000,
+  2120.09,
+  2662.99,
+  { days: 25, period: 'daily' },
+)
 
-// get results from start timestamp for lp from quote token 
+// get results from start timestamp for lp from quote token
 await uniswapStrategyBacktest(
-  "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 
+  '0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640',
   1,
-  1/2662.99,
-  1/2120.09,
-  {startTimestamp: 1653364800, period: "daily", priceToken: 1}
-);
+  1 / 2662.99,
+  1 / 2120.09,
+  { startTimestamp: 1653364800, period: 'daily', priceToken: 1 },
+)
 
-// get results from start timestamp to end timestamp for lp from quote token 
+// get results from start timestamp to end timestamp for lp from quote token
 await uniswapStrategyBacktest(
-  "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 
+  '0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640',
   1,
-  1/2662.99,
-  1/2120.09,
-  {startTimestamp: 1653364800, endTimestamp: 1653374800, period: "daily", priceToken: 1}
-);
+  1 / 2662.99,
+  1 / 2120.09,
+  {
+    startTimestamp: 1653364800,
+    endTimestamp: 1653374800,
+    period: 'daily',
+    priceToken: 1,
+  },
+)
 
-// get results for n days before end timestamp for lp from quote token 
+// get results for n days before end timestamp for lp from quote token
 await uniswapStrategyBacktest(
-  "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", 
+  '0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640',
   1,
-  1/2662.99,
-  1/2120.09,
-  {endTimestamp: 1653364800, days: 1, period: "daily", priceToken: 1}
-);
+  1 / 2662.99,
+  1 / 2120.09,
+  { endTimestamp: 1653364800, days: 1, period: 'daily', priceToken: 1 },
+)
 ```
 
-Example Output: 
+Example Output:
 
 ```
 
@@ -118,44 +144,37 @@ Example Output:
 uniswapStrategyBacktest() should be called with the following arguments:
 
 ```
-uniswapStrategyBacktest(    
-  poolID,    
-  investmentAmount,    
-  minRange,    
-  maxRange,    
+uniswapStrategyBacktest(
+  poolID,
+  investmentAmount,
+  minRange,
+  maxRange,
   options
 )
 ```
 
 **poolID** = the ID of the pool you'd like to run the backtest for. Example for [ETH / USD 0.05%](https://info.uniswap.org/#/pools/0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640) would be "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
 
-**investmentAmount** = the initial amount invested in the LP strategy. This value is presumed to be denominated in the base token of the pair (Token0) but can be overridden to use the quote token with the options argument. 
+**investmentAmount** = the initial amount invested in the LP strategy. This value is presumed to be denominated in the base token of the pair (Token0) but can be overridden to use the quote token with the options argument.
 
-**minRange** = the lower bound of the LP Strategy. As with investmentAmount, presumed to be in base but can be overridden to use quote.    
+**minRange** = the lower bound of the LP Strategy. As with investmentAmount, presumed to be in base but can be overridden to use quote.  
 **maxRange** = the upper bound of the LP Strategy. As with investmentAmount, presumed to be in base but can be overridden to use quote.
 
-**options** = Optional values that override default values. Formed as a JSON key value pair `{days: 30, protocol: 0, priceToken: 0, period: "hourly"}`    
-        **days** = number of days to run the backtest from todays date. Defaults to 30, Currently maxed to 30.     
-        **startTimestamp** = timestamp in seconds for LP start. Optional.     
-        **endTimestamp** = timestamp in seconds for LP end. Optional. If used with *days* provides results for `n` days before timestamp  
-        **priceToken** = 0 = values in baseToken, 1 = values in quoteToken (Token0, Token1) 
-        **period** = Calculate fees "daily" or "hourly", defaults to "hourly"  
-        **protocol** - Which chain, sidechain or L2 to use:  
-            0 = Ethereum (default)    
-            1 = Optimism    
-            2 = Arbitrum   
-            3 = Polygon   
-
+**options** = Optional values that override default values. Formed as a JSON key value pair `{days: 30, protocol: 0, priceToken: 0, period: "hourly"}`  
+ **days** = number of days to run the backtest from todays date. Defaults to 30, Currently maxed to 30.  
+ **startTimestamp** = timestamp in seconds for LP start. Optional.  
+ **endTimestamp** = timestamp in seconds for LP end. Optional. If used with _days_ provides results for `n` days before timestamp  
+ **priceToken** = 0 = values in baseToken, 1 = values in quoteToken (Token0, Token1)
+**period** = Calculate fees "daily" or "hourly", defaults to "hourly"  
+ **protocol** - Which chain, sidechain or L2 to use:  
+ 0 = Ethereum (default)  
+ 1 = Optimism  
+ 2 = Arbitrum  
+ 3 = Polygon
 
 ## **uniswapStrategyBacktest() output**
 
-**amountV** = the total value of the LP position for the specified period.    
-**feeV** =  the fees generated for the specified period.    
-**activeliquidity** = the % of the strategies liquidity that was active within the specified period.    
-**feeUSD** = the total fees in USD   
-
-
-  
-
-
-
+**amountV** = the total value of the LP position for the specified period.  
+**feeV** = the fees generated for the specified period.  
+**activeliquidity** = the % of the strategies liquidity that was active within the specified period.  
+**feeUSD** = the total fees in USD
