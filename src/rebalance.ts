@@ -2,6 +2,7 @@ import { RebalanceTestOptions, BacktestState } from './types'
 import { uniswapStrategyBacktestData } from './staticRange'
 import { poolById, getPoolHourData } from './uniPoolData'
 import { DateByDaysAgo, S_YEAR } from './utils'
+import { getRewardAprs } from './uniPoolData'
 
 // assume .2% slippage + .1% fees
 const SLIPPAGE = 0.002 + 0.001
@@ -14,6 +15,7 @@ export const rebalanceBacktest = async (
     days: 30,
     protocol: 0,
     period: 'hourly',
+    rebalanceType: 'threshold',
     ...options,
   }
 
@@ -22,6 +24,15 @@ export const rebalanceBacktest = async (
   // TODO this is logic for perpetual only
   if (opt.priceToken == null)
     opt.priceToken = poolData.token0.symbol === 'vUSD' ? 0 : 1
+
+  const baseAsset =
+    opt.priceToken == 1 ? poolData.token0.symbol : poolData.token1.symbol
+  const allAprs = await getRewardAprs()
+  const rewardApis = allAprs.find((r) => r.baseSymbol == baseAsset)
+
+  const rewardRatio =
+    (rewardApis.riskLevelRewardAprs[1] + rewardApis.riskLevelRewardOpAprs[1]) /
+    rewardApis.riskLevelBaseAprs[1]
 
   const { days } = opt
   let { startTimestamp, endTimestamp } = opt
@@ -53,6 +64,7 @@ export const rebalanceBacktest = async (
     il: 0,
     results: [],
     startBalance: balance,
+    rewardRatio,
   }
   const endState = await processNextPeriod(priceData, backtestState, opt)
 
@@ -74,6 +86,7 @@ const processNextPeriod = async (data, state, opt) => {
   const { balance, poolData, startBalance } = state
 
   const i = getRebalanceIndex(data, state, opt)
+  console.log('index', i)
   const index = i < 0 ? -1 : i + 1
   const entryPrice = priceToken === 1 ? 1 / data[0].close : data[0].close
 
@@ -93,24 +106,26 @@ const processNextPeriod = async (data, state, opt) => {
 
   const periodEnd = backtestSegment[backtestSegment.length - 1]
   const tokenStart = start.tokens[1]
-  const impermanentPosition = start.tokens[1] - periodEnd.tokens[1]
+  const impermanentPosition = periodEnd.tokens[1] - start.tokens[1]
+  const notional = periodEnd.tokens[0] - start.tokens[0]
 
   const startPrice = parseFloat(start.baseClose)
   const endPrice = parseFloat(periodEnd.baseClose)
 
   let accumulatedFees = 0
   const valueTimeSeries = backtestSegment.map((d, i) => {
-    accumulatedFees += d.feeV
-    const il = (tokenStart - d.tokens[1]) * (startPrice - d.baseClose)
+    accumulatedFees += (d.feeV / 3) * 0.9 * (1 + state.rewardRatio) // approximate the .1% perp fees from uni fees .3 fees.
+    const intervalNotional = d.tokens[0] - start.tokens[0]
+    const intervalPosition = d.tokens[1] - tokenStart
+    const pnl = intervalNotional + intervalPosition * d.baseClose
     return {
       ...d,
-      value: (state.balance + accumulatedFees + il) / startBalance - 1,
+      value: (state.balance + accumulatedFees + pnl) / startBalance - 1,
       rebalance: index > 0 && i === backtestSegment.length - 1 ? 1 : 0,
     }
   })
-  state.results = [...state.results, ...valueTimeSeries]
 
-  const permanentLoss = impermanentPosition * (startPrice - endPrice)
+  const permanentLoss = notional + impermanentPosition * endPrice
 
   state.il += permanentLoss
   state.fees += accumulatedFees
@@ -120,14 +135,23 @@ const processNextPeriod = async (data, state, opt) => {
 
   logPeriod()
 
+  // throw away the first datapoint since its the same as the final one from prev period
+  if (state.results.length) valueTimeSeries.shift()
+  state.results = [...state.results, ...valueTimeSeries]
+
   if (index <= 0 || index === data.length) return state
 
-  return processNextPeriod(data.slice(index), state, opt)
+  return processNextPeriod(data.slice(index - 1), state, opt)
 
   function logPeriod() {
     console.log('----- rebalance point ----')
     console.log('priceMove', toPercent((startPrice - endPrice) / startPrice))
-    console.log('fees', accumulatedFees)
+    console.log('fees + rewards', accumulatedFees)
+    console.log('fees', accumulatedFees / (1 + state.rewardRatio))
+    console.log(
+      'rewards',
+      (accumulatedFees * state.rewardRatio) / (1 + state.rewardRatio),
+    )
     console.log('lp balance', periodEnd.amountV)
     console.log('permanentLoss', toPercent(permanentLoss / balance))
     console.log('permanentLoss', permanentLoss)
@@ -137,20 +161,33 @@ const processNextPeriod = async (data, state, opt) => {
 }
 
 const getRebalanceIndex = (data, state, opt) => {
-  const { priceToken, rebalanceThreshold } = opt
+  const { priceToken, rebalanceThreshold, rebalanceType, startTimestamp } = opt
   if (!data.length) return -1
+
+  const periodStart = state.lastRebalance
+    ? state.lastRebalance.periodStartUnix
+    : startTimestamp
+  if (rebalanceType == 'daily')
+    return data.findIndex((d) => {
+      if (d.periodStartUnix - periodStart >= 60 * 60 * 24) {
+        state.lastRebalance = d
+        return true
+      }
+      return false
+    })
+
+  const entryPriceUnadjusted =
+    state.lastRebalance != null ? state.lastRebalance.close : data[0].close
+
   const entryPrice =
-    state.lastRebalance != null
-      ? state.lastRebalance
-      : priceToken === 1
-      ? 1 / data[0].close
-      : data[0].close
+    priceToken === 1 ? 1 / entryPriceUnadjusted : entryPriceUnadjusted
 
   return data.findIndex((d) => {
     const price = priceToken === 1 ? 1 / d.close : d.close
     const priceOffset = Math.abs(price - entryPrice) / entryPrice
     if (priceOffset > rebalanceThreshold) {
-      state.lastRebalance = price
+      console.log(priceOffset)
+      state.lastRebalance = d
       return true
     }
     return false

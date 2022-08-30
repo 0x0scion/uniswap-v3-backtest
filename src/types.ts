@@ -7,6 +7,7 @@ export interface RebalanceTestOptions {
   period?: 'hourly' | 'daily'
   startTimestamp?: number
   endTimestamp?: number
+  rebalanceType?: string
 }
 
 export interface TestOptions {
@@ -28,5 +29,6 @@ export interface BacktestState {
   results: any
   poolData: any
   startBalance: number
-  lastRebalance?: number
+  lastRebalance?: any
+  rewardRatio: number
 }

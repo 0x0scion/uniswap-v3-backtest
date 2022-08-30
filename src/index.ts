@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { rebalanceBacktest } from './rebalance'
 import { S_DAY } from './utils'
 
@@ -24,8 +25,11 @@ export const perpetualBacktest = async (args) => {
     ...args,
   })
 
+  // don't aggregate if less than 60d
+  const aggregateToDays = end - start > 60 * 60 * 24 * 60
+
   // aggregate to days to make zoom work better
-  const data = [backtestData.results[0]]
+  let data = [{ ...backtestData.results[0] }]
   let n = 1
 
   backtestData.results.forEach((d) => {
@@ -40,7 +44,7 @@ export const perpetualBacktest = async (args) => {
       n++
       return
     }
-    data.push(d)
+    data = [...data, { ...d }]
     n = 1
   })
 
@@ -50,21 +54,23 @@ export const perpetualBacktest = async (args) => {
     return loss > a ? loss : a
   }, 0)
 
-  const rebalances = data.reduce((a, d) => d.rebalance + a, 0)
+  const finalData = aggregateToDays ? data : backtestData.results
+
+  const rebalances = finalData.reduce((a, d) => d.rebalance + a, 0)
 
   const res = {
-    data: data.map((d) => ({
+    data: finalData.map((d) => ({
       timestamp: d.periodStartUnix,
-      value: d.value - 100,
+      value: 100 * d.value,
       price: d.baseClose,
       rebalance: d.rebalance,
     })),
     stats: {
-      APR: backtestData.apr,
-      'Fees APR': backtestData.fees,
-      'IL APR': -backtestData.il,
+      APR: 100 * backtestData.apr,
+      'Fees APR': 100 * backtestData.fees,
+      'IL APR': 100 * -backtestData.il,
       'Rebalance per Day': 100 * (rebalances / (end - start)) * S_DAY,
-      'Max 1d Drawdown': maxDayLoss,
+      'Max 1d Drawdown': 100 * maxDayLoss,
     },
   }
   return res
@@ -84,15 +90,6 @@ const main = async () => {
       priceToken: 1,
     },
   )
-  backtestResults.results.forEach((r, i) => {
-    if (i == 0) return
-    const prev = backtestResults.results[i - 1]
-    if (r.periodStartUnix == prev.periodStartUnix) {
-      console.log('duplicates', i, r.periodStartUnix, prev.periodStartUnix)
-    }
-  })
-  // console.log(backtestResults.results[0])
-  // console.log(backtestResults.results[backtestResults.results.length - 1])
 }
 
 main()

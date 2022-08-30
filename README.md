@@ -6,6 +6,8 @@
 yarn install
 ```
 
+add `.env` file containing a `PERP_API_KEY`
+
 ## Run Example Test
 
 ```
